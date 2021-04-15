@@ -10,17 +10,21 @@ import (
 func TestTask(t *testing.T) {
 	tasker := NewTasker(1)
 	tasker.Init(
-		WithContextDoneCb(func() {
+		WithStartFn(func() {
+			fmt.Println("tasker start...")
+		}),
+
+		WithContextDoneFn(func() {
 			fmt.Println("tasker context done...")
+		}),
+
+		WithUpdateFn(func() {
+			fmt.Println("tasker update...")
 		}),
 
 		WithTimeout(time.Second*5),
 
 		WithSleep(time.Millisecond*100),
-
-		WithUpdateCb(func() {
-			fmt.Println("tasker update...")
-		}),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)

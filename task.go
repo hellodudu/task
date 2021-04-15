@@ -72,11 +72,15 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error
 }
 
 func (t *Tasker) Run(ctx context.Context) error {
+	if t.opts.startFn != nil {
+		t.opts.startFn()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
-			if t.opts.ctxCb != nil {
-				t.opts.ctxCb() // context done callback
+			if t.opts.ctxFn != nil {
+				t.opts.ctxFn() // context done callback
 			}
 			return nil
 
@@ -96,8 +100,8 @@ func (t *Tasker) Run(ctx context.Context) error {
 
 		default:
 			now := time.Now()
-			if t.opts.updateCb != nil {
-				t.opts.updateCb() // update callback
+			if t.opts.updateFn != nil {
+				t.opts.updateFn() // update callback
 			}
 			d := time.Since(now)
 			time.Sleep(t.opts.sleep - d)
