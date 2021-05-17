@@ -72,8 +72,10 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error
 }
 
 func (t *Tasker) Run(ctx context.Context) error {
-	if t.opts.startFn != nil {
-		t.opts.startFn()
+	if len(t.opts.startFns) > 0 {
+		for _, fn := range t.opts.startFns {
+			fn()
+		}
 	}
 
 	for {

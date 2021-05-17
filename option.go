@@ -8,7 +8,7 @@ type UpdateFn func()
 
 type TaskerOption func(*TaskerOptions)
 type TaskerOptions struct {
-	startFn  StartFn       // start callback
+	startFns []StartFn     // start callback
 	ctxFn    ContextDoneFn // context done callback
 	updateFn UpdateFn      // default update callback
 	timer    *time.Timer
@@ -19,7 +19,7 @@ type TaskerOptions struct {
 func defaultTaskerOptions() *TaskerOptions {
 	return &TaskerOptions{
 		d:        TaskDefaultTimeout,
-		startFn:  nil,
+		startFns: make([]StartFn, 0, 5),
 		ctxFn:    nil,
 		updateFn: nil,
 		timer:    time.NewTimer(TaskDefaultTimeout),
@@ -27,9 +27,10 @@ func defaultTaskerOptions() *TaskerOptions {
 	}
 }
 
-func WithStartFn(f StartFn) TaskerOption {
+func WithStartFns(f ...StartFn) TaskerOption {
 	return func(o *TaskerOptions) {
-		o.startFn = f
+		o.startFns = o.startFns[:0]
+		o.startFns = append(o.startFns, f...)
 	}
 }
 

@@ -10,9 +10,14 @@ import (
 func TestTask(t *testing.T) {
 	tasker := NewTasker(1)
 	tasker.Init(
-		WithStartFn(func() {
-			fmt.Println("tasker start...")
-		}),
+		WithStartFns(
+			func() {
+				fmt.Println("tasker start fn1...")
+			},
+			func() {
+				fmt.Println("tasker start fn2...")
+			},
+		),
 
 		WithContextDoneFn(func() {
 			fmt.Println("tasker context done...")
