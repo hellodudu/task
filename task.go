@@ -3,6 +3,8 @@ package task
 import (
 	"context"
 	"errors"
+	"fmt"
+	"runtime/debug"
 	"time"
 )
 
@@ -72,6 +74,13 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error
 }
 
 func (t *Tasker) Run(ctx context.Context) error {
+	defer func() {
+		if err := recover(); err != nil {
+			stack := string(debug.Stack())
+			fmt.Printf("catch exception:%v, panic recovered with stack:%s", err, stack)
+		}
+	}()
+
 	if len(t.opts.startFns) > 0 {
 		for _, fn := range t.opts.startFns {
 			fn()
