@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"runtime/debug"
 	"time"
+
+	"go.uber.org/atomic"
 )
 
 var (
@@ -24,8 +26,9 @@ type Task struct {
 }
 
 type Tasker struct {
-	opts  *TaskerOptions
-	tasks chan *Task
+	opts    *TaskerOptions
+	tasks   chan *Task
+	running atomic.Bool
 }
 
 func NewTasker(max int32) *Tasker {
@@ -51,6 +54,10 @@ func (t *Tasker) ResetTimer() {
 	tm.Reset(t.opts.d)
 }
 
+func (t *Tasker) IsRunning() bool {
+	return t.running.Load()
+}
+
 func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error {
 	subCtx, cancel := context.WithTimeout(ctx, TaskDefaultExecuteTimeout)
 	defer cancel()
@@ -74,11 +81,15 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error
 }
 
 func (t *Tasker) Run(ctx context.Context) error {
+	t.running.Store(true)
+
 	defer func() {
 		if err := recover(); err != nil {
 			stack := string(debug.Stack())
 			fmt.Printf("catch exception:%v, panic recovered with stack:%s", err, stack)
 		}
+
+		t.running.Store(false)
 	}()
 
 	if len(t.opts.startFns) > 0 {
@@ -121,6 +132,7 @@ func (t *Tasker) Run(ctx context.Context) error {
 }
 
 func (t *Tasker) Stop() {
+	t.running.Store(false)
 	close(t.tasks)
 	t.opts.timer.Stop()
 }
