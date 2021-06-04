@@ -45,7 +45,7 @@ func TestTask(t *testing.T) {
 	}()
 
 	// add task
-	_ = tasker.Add(
+	_ = tasker.AddWait(
 		ctx,
 		func(c context.Context, p ...interface{}) error {
 			p1 := p[0].(int)
@@ -60,7 +60,7 @@ func TestTask(t *testing.T) {
 	// concurrent
 	for n := 0; n < 10; n++ {
 		go func(taskId int) {
-			_ = tasker.Add(
+			_ = tasker.AddWait(
 				ctx,
 				func(c context.Context, p ...interface{}) error {
 					p1 := p[0].(int)

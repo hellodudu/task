@@ -58,7 +58,7 @@ func (t *Tasker) IsRunning() bool {
 	return t.running.Load()
 }
 
-func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error {
+func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) error {
 	subCtx, cancel := context.WithTimeout(ctx, TaskDefaultExecuteTimeout)
 	defer cancel()
 
@@ -74,10 +74,21 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error
 
 	select {
 	case err := <-e:
-		return err
+		return fmt.Errorf("task add with error:%w, chan buff size:%d", err, len(t.tasks))
 	case <-subCtx.Done():
-		return subCtx.Err()
+		return fmt.Errorf("task add with timeout:%w, chan buff size:%d", subCtx.Err(), len(t.tasks))
 	}
+}
+
+func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
+	tk := &Task{
+		c: ctx,
+		f: f,
+		e: nil,
+		p: make([]interface{}, 0, len(p)),
+	}
+	tk.p = append(tk.p, p...)
+	t.tasks <- tk
 }
 
 func (t *Tasker) Run(ctx context.Context) error {
@@ -111,7 +122,10 @@ func (t *Tasker) Run(ctx context.Context) error {
 				return nil
 			} else {
 				err := h.f(h.c, h.p...)
-				h.e <- err // handle result
+				if h.e != nil {
+					h.e <- err // handle result
+				}
+
 				if err == nil {
 					continue
 				}
