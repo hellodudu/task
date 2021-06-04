@@ -74,8 +74,14 @@ func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) e
 
 	select {
 	case err := <-e:
+		if err == nil {
+			return nil
+		}
 		return fmt.Errorf("task add with error:%w, chan buff size:%d", err, len(t.tasks))
 	case <-subCtx.Done():
+		if subCtx.Err() == nil {
+			return nil
+		}
 		return fmt.Errorf("task add with timeout:%w, chan buff size:%d", subCtx.Err(), len(t.tasks))
 	}
 }
