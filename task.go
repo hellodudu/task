@@ -127,6 +127,12 @@ func (t *Tasker) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			} else {
+				select {
+				case <-h.c.Done():
+					continue
+				default:
+				}
+
 				err := h.f(h.c, h.p...)
 				if h.e != nil {
 					h.e <- err // handle result
