@@ -19,8 +19,8 @@ func TestTask(t *testing.T) {
 			},
 		),
 
-		WithContextDoneFn(func() {
-			fmt.Println("tasker context done...")
+		WithStopFn(func() {
+			fmt.Println("tasker stop...")
 		}),
 
 		WithUpdateFn(func() {
