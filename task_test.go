@@ -19,9 +19,14 @@ func TestTask(t *testing.T) {
 			},
 		),
 
-		WithStopFn(func() {
-			fmt.Println("tasker stop...")
-		}),
+		WithStopFns(
+			func() {
+				fmt.Println("tasker stop fn1...")
+			},
+			func() {
+				fmt.Println("tasker stop fn2...")
+			},
+		),
 
 		WithUpdateFn(func() {
 			fmt.Println("tasker update...")

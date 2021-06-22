@@ -110,8 +110,10 @@ func (t *Tasker) Run(ctx context.Context) error {
 			fmt.Printf("catch exception:%v, panic recovered with stack:%s", err, stack)
 		}
 
-		if t.opts.stopFn != nil {
-			t.opts.stopFn()
+		if len(t.opts.stopFns) > 0 {
+			for _, fn := range t.opts.stopFns {
+				fn()
+			}
 		}
 
 		t.opts.timer.Stop()
