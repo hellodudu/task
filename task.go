@@ -104,6 +104,7 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
 }
 
 func (t *Tasker) Run(ctx context.Context) error {
+	t.ResetTimer()
 	t.running.Store(true)
 
 	defer func() {
