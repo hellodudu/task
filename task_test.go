@@ -8,7 +8,7 @@ import (
 )
 
 func TestTask(t *testing.T) {
-	tasker := NewTasker(1)
+	tasker := NewTasker()
 	tasker.Init(
 		WithStartFns(
 			func() {
