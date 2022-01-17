@@ -35,6 +35,8 @@ func TestTask(t *testing.T) {
 		WithTimeout(time.Second*5),
 
 		WithSleep(time.Millisecond*100),
+
+		WithUpdateInterval(time.Millisecond*200),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)

@@ -15,7 +15,8 @@ var (
 	TaskDefaultChannelSize    = 64                       // task channel buffer size
 	TaskDefaultExecuteTimeout = time.Second * 5          // execute timeout
 	TaskDefaultTimeout        = time.Hour * 24 * 30 * 12 // default timeout
-	TaskDefaultSleep          = time.Millisecond * 500   // sleep time 500ms
+	TaskDefaultSleep          = time.Millisecond * 100   // default sleep
+	TaskDefaultUpdateInterval = time.Second              // update interval
 	ErrTimeout                = errors.New("time out")
 )
 
@@ -122,7 +123,16 @@ func (t *Tasker) Run(ctx context.Context) error {
 		}
 	}
 
+	lastTm := time.Now()
 	for {
+		// update
+		now := time.Now()
+		if t.opts.updateFn != nil &&
+			now.Sub(lastTm) >= t.opts.updateInterval {
+			t.opts.updateFn()
+			lastTm = now
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
@@ -149,15 +159,11 @@ func (t *Tasker) Run(ctx context.Context) error {
 
 		case <-t.opts.timer.C:
 			return ErrTimeout
-
-		default:
-			now := time.Now()
-			if t.opts.updateFn != nil {
-				t.opts.updateFn() // update callback
-			}
-			d := time.Since(now)
-			time.Sleep(t.opts.sleep - d)
 		}
+
+		// sleep
+		d := time.Since(now)
+		time.Sleep(t.opts.sleep - d)
 	}
 }
 
