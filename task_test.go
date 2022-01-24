@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -63,6 +64,18 @@ func TestTask(t *testing.T) {
 		1,
 		"parameters",
 	)
+
+	// task failed
+	err1 := errors.New("just failed")
+	err := tasker.AddWait(
+		ctx,
+		func(context.Context, ...interface{}) error {
+			return err1
+		},
+	)
+	if errors.Is(err, err1) {
+		fmt.Println("catch task failed error")
+	}
 
 	// concurrent
 	for n := 0; n < 10; n++ {

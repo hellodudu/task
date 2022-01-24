@@ -12,12 +12,13 @@ import (
 )
 
 var (
-	TaskDefaultChannelSize    = 64                     // task channel buffer size
-	TaskDefaultExecuteTimeout = time.Second * 5        // execute timeout
-	TaskDefaultTimeout        = time.Second * 10       // default timeout
-	TaskDefaultSleep          = time.Millisecond * 100 // default sleep
-	TaskDefaultUpdateInterval = time.Second            // update interval
+	TaskDefaultChannelSize    = 64                       // task channel buffer size
+	TaskDefaultExecuteTimeout = time.Hour * 24 * 30 * 12 // execute timeout
+	TaskDefaultTimeout        = time.Second * 10         // default timeout
+	TaskDefaultSleep          = time.Millisecond * 100   // default sleep
+	TaskDefaultUpdateInterval = time.Second              // update interval
 	ErrTimeout                = errors.New("time out")
+	ErrTaskFailed             = errors.New("task failed")
 )
 
 type TaskHandler func(context.Context, ...interface{}) error
