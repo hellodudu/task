@@ -177,6 +177,7 @@ func (t *Tasker) stop() {
 	}
 
 	t.opts.timer.Stop()
+	t.ticker.Stop()
 	t.running.Store(false)
 	close(t.stopChan)
 }
