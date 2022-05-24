@@ -165,8 +165,8 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 					h.e <- err // handle result
 				}
 
-				if err == nil {
-					continue
+				if err != nil {
+					fmt.Printf("execute %v with error:%v\n", h.f, err)
 				}
 			}
 
