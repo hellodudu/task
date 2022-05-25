@@ -175,7 +175,10 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 
 		case <-t.ticker.C:
 			if t.opts.updateFn != nil {
-				t.opts.updateFn()
+				// grace stop task when update
+				if !t.opts.updateFn() {
+					return
+				}
 			}
 		}
 

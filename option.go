@@ -4,7 +4,7 @@ import "time"
 
 type StartFn func()
 type StopFn func()
-type UpdateFn func()
+type UpdateFn func() bool
 
 type TaskerOption func(*TaskerOptions)
 type TaskerOptions struct {

@@ -29,8 +29,9 @@ func TestTask(t *testing.T) {
 			},
 		),
 
-		WithUpdateFn(func() {
+		WithUpdateFn(func() bool {
 			fmt.Println("tasker update...")
+			return true
 		}),
 
 		WithTimeout(time.Second*5),
