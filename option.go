@@ -1,6 +1,7 @@
 package task
 
 import (
+	"io"
 	"log"
 	"time"
 )
@@ -20,7 +21,6 @@ type TaskerOptions struct {
 	updateInterval time.Duration // update interval duration
 	executeTimeout time.Duration // execute timeout
 	chanBufSize    int           // channel buffer size
-	logger         Logger        // logger
 }
 
 func defaultTaskerOptions() *TaskerOptions {
@@ -34,7 +34,6 @@ func defaultTaskerOptions() *TaskerOptions {
 		updateInterval: TaskDefaultUpdateInterval,
 		executeTimeout: TaskDefaultExecuteTimeout,
 		chanBufSize:    TaskDefaultChannelSize,
-		logger:         log.Default(),
 	}
 }
 
@@ -88,8 +87,8 @@ func WithUniqueId(id int32) TaskerOption {
 	}
 }
 
-func WithLogger(l Logger) TaskerOption {
+func WithOutput(output io.Writer) TaskerOption {
 	return func(o *TaskerOptions) {
-		o.logger = l
+		log.SetOutput(output)
 	}
 }

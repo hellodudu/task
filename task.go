@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -135,7 +136,7 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 	defer func() {
 		if err := recover(); err != nil {
 			stack := string(debug.Stack())
-			t.opts.logger.Printf("catch exception:%v, panic recovered with stack:%s", err, stack)
+			log.Printf("catch exception:%v, panic recovered with stack:%s", err, stack)
 			reterr = ErrTaskPanic
 		}
 		t.stop()
@@ -169,7 +170,7 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 
 				if err != nil {
 					funcName := runtime.FuncForPC(reflect.ValueOf(h.f).Pointer()).Name()
-					t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+					log.Printf("execute %s with error:%v\n", funcName, err)
 				}
 			}
 
