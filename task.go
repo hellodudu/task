@@ -206,5 +206,11 @@ func (t *Tasker) stop() {
 
 	t.opts.timer.Stop()
 	t.running.Store(false)
-	close(t.stopChan)
+
+	select {
+	case <-t.stopChan:
+		return
+	default:
+		close(t.stopChan)
+	}
 }
