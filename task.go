@@ -23,6 +23,7 @@ var (
 	ErrTaskPanic              = errors.New("task panic")
 	ErrTaskFailed             = errors.New("task failed")
 	ErrTaskFulled             = errors.New("task fulled")
+	ErrTaskNotRunning         = errors.New("task not running")
 )
 
 type TaskHandler func(context.Context, ...interface{}) error
@@ -84,6 +85,10 @@ func (t *Tasker) IsRunning() bool {
 }
 
 func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) error {
+	if !t.IsRunning() {
+		return ErrTaskNotRunning
+	}
+
 	if len(t.tasks) >= t.opts.chanBufSize {
 		return ErrTaskFulled
 	}
@@ -116,6 +121,10 @@ func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) e
 }
 
 func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
+	if !t.IsRunning() {
+		return
+	}
+
 	if len(t.tasks) >= t.opts.chanBufSize {
 		return
 	}
