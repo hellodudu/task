@@ -91,7 +91,7 @@ func WithUniqueId(id int32) TaskerOption {
 
 func WithOutput(output io.Writer) TaskerOption {
 	return func(o *TaskerOptions) {
-		o.logger = log.New(output, "ttl_writer: ", log.Lmsgprefix|log.LstdFlags)
+		o.logger = log.New(output, "tasker: ", log.Lmsgprefix|log.LstdFlags)
 		log.SetOutput(output)
 	}
 }
