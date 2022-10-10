@@ -103,19 +103,30 @@ func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) e
 		p: make([]interface{}, 0, len(p)),
 	}
 	tk.p = append(tk.p, p...)
-	t.tasks <- tk
 
+	// send channel
+	select {
+	case t.tasks <- tk:
+		break
+	case <-subCtx.Done():
+		if subCtx.Err() == nil {
+			return nil
+		}
+		return fmt.Errorf("task send to channel with timeout:%w, chan buff size:%d", subCtx.Err(), len(t.tasks))
+	}
+
+	// wait channel result
 	select {
 	case err := <-e:
 		if err == nil {
 			return nil
 		}
-		return fmt.Errorf("task add with error:%w, chan buff size:%d", err, len(t.tasks))
+		return fmt.Errorf("task wait channel result with error:%w, chan buff size:%d", err, len(t.tasks))
 	case <-subCtx.Done():
 		if subCtx.Err() == nil {
 			return nil
 		}
-		return fmt.Errorf("task add with timeout:%w, chan buff size:%d", subCtx.Err(), len(t.tasks))
+		return fmt.Errorf("task wait channel result with timeout:%w, chan buff size:%d", subCtx.Err(), len(t.tasks))
 	}
 }
 
