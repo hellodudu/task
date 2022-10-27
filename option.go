@@ -8,7 +8,7 @@ import (
 
 type StartFn func()
 type StopFn func()
-type UpdateFn func() bool
+type UpdateFn func() error
 
 type TaskerOption func(*TaskerOptions)
 type TaskerOptions struct {
