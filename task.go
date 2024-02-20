@@ -163,7 +163,7 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 
 		default:
 			if t.tasks.Size() <= 0 {
-				time.Sleep(time.Millisecond)
+				time.Sleep(time.Millisecond * 20)
 				continue
 			}
 
