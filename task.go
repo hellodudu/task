@@ -163,31 +163,32 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 
 		default:
 			if t.tasks.Size() <= 0 {
-				runtime.Gosched()
+				time.Sleep(time.Millisecond)
 				continue
 			}
 
-			h := t.tasks.Pop()
-			if h == nil {
-				runtime.Gosched()
-				continue
-			}
+			for {
+				h := t.tasks.Pop()
+				if h == nil {
+					break
+				}
 
-			tk := h.(*Task)
-			select {
-			case <-tk.c.Done():
-				continue
-			default:
-			}
+				tk := h.(*Task)
+				select {
+				case <-tk.c.Done():
+					continue
+				default:
+				}
 
-			err := tk.f(tk.c, tk.p...)
-			if tk.e != nil {
-				tk.e <- err // handle result
-			}
+				err := tk.f(tk.c, tk.p...)
+				if tk.e != nil {
+					tk.e <- err // handle result
+				}
 
-			if err != nil {
-				funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
-				t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+				if err != nil {
+					funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
+					t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+				}
 			}
 		}
 	}
