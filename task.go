@@ -14,7 +14,6 @@ import (
 )
 
 var (
-	TaskDefaultChannelSize    = 64                   // task channel buffer size
 	TaskDefaultExecuteTimeout = time.Second * 5      // execute timeout
 	TaskDefaultTimeout        = time.Hour * 24 * 356 // default timeout
 	TaskDefaultUpdateInterval = time.Second          // update interval
@@ -35,7 +34,7 @@ type Task struct {
 
 type Tasker struct {
 	opts     *TaskerOptions
-	tasks    chan *Task
+	tasks    *Queue
 	stopChan chan struct{}
 	ticker   *time.Ticker
 	stopOnce *sync.Once
@@ -45,7 +44,7 @@ type Tasker struct {
 func NewTasker() *Tasker {
 	return &Tasker{
 		opts:     &TaskerOptions{},
-		tasks:    make(chan *Task, TaskDefaultChannelSize),
+		tasks:    NewQueue(),
 		stopChan: make(chan struct{}, 1),
 		ticker:   time.NewTicker(TaskDefaultUpdateInterval),
 		stopOnce: new(sync.Once),
@@ -57,10 +56,6 @@ func (t *Tasker) Init(opts ...TaskerOption) {
 
 	for _, o := range opts {
 		o(t.opts)
-	}
-
-	if t.opts.chanBufSize > TaskDefaultChannelSize {
-		t.tasks = make(chan *Task, t.opts.chanBufSize)
 	}
 
 	t.running.Store(true)
@@ -76,7 +71,7 @@ func (t *Tasker) ResetTimer() {
 }
 
 func (t *Tasker) GetTaskNum() int {
-	return len(t.tasks)
+	return int(t.tasks.Size())
 }
 
 func (t *Tasker) IsRunning() bool {
@@ -86,10 +81,6 @@ func (t *Tasker) IsRunning() bool {
 func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) error {
 	if !t.IsRunning() {
 		return ErrTaskNotRunning
-	}
-
-	if len(t.tasks) >= t.opts.chanBufSize {
-		return ErrTaskFulled
 	}
 
 	subCtx, cancel := context.WithTimeout(ctx, t.opts.executeTimeout)
@@ -104,38 +95,25 @@ func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) e
 	}
 	tk.p = append(tk.p, p...)
 
-	// send channel
-	select {
-	case t.tasks <- tk:
-		break
-	case <-subCtx.Done():
-		if subCtx.Err() == nil {
-			return nil
-		}
-		return fmt.Errorf("task send to channel with timeout:%w, chan buff size:%d", subCtx.Err(), len(t.tasks))
-	}
+	t.tasks.Push(tk)
 
-	// wait channel result
+	// wait result
 	select {
 	case err := <-e:
 		if err == nil {
 			return nil
 		}
-		return fmt.Errorf("task wait channel result with error:%w, chan buff size:%d", err, len(t.tasks))
+		return fmt.Errorf("task wait channel result with error:%w, chan buff size:%d", err, t.tasks.Size())
 	case <-subCtx.Done():
 		if subCtx.Err() == nil {
 			return nil
 		}
-		return fmt.Errorf("task wait channel result with timeout:%w, chan buff size:%d", subCtx.Err(), len(t.tasks))
+		return fmt.Errorf("task wait channel result with timeout:%w, chan buff size:%d", subCtx.Err(), t.tasks.Size())
 	}
 }
 
 func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
 	if !t.IsRunning() {
-		return
-	}
-
-	if len(t.tasks) >= t.opts.chanBufSize {
 		return
 	}
 
@@ -146,7 +124,7 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
 		p: make([]interface{}, 0, len(p)),
 	}
 	tk.p = append(tk.p, p...)
-	t.tasks <- tk
+	t.tasks.Push(tk)
 }
 
 func (t *Tasker) Run(ctx context.Context) (reterr error) {
@@ -172,27 +150,6 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 		case <-ctx.Done():
 			return nil
 
-		case h, ok := <-t.tasks:
-			if !ok {
-				return nil
-			} else {
-				select {
-				case <-h.c.Done():
-					continue
-				default:
-				}
-
-				err := h.f(h.c, h.p...)
-				if h.e != nil {
-					h.e <- err // handle result
-				}
-
-				if err != nil {
-					funcName := runtime.FuncForPC(reflect.ValueOf(h.f).Pointer()).Name()
-					t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
-				}
-			}
-
 		case <-t.opts.timer.C:
 			return ErrTimeout
 
@@ -203,14 +160,42 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 					return err
 				}
 			}
-		}
 
+		default:
+			if t.tasks.Size() <= 0 {
+				runtime.Gosched()
+				continue
+			}
+
+			h := t.tasks.Pop()
+			if h == nil {
+				runtime.Gosched()
+				continue
+			}
+
+			tk := h.(*Task)
+			select {
+			case <-tk.c.Done():
+				continue
+			default:
+			}
+
+			err := tk.f(tk.c, tk.p...)
+			if tk.e != nil {
+				tk.e <- err // handle result
+			}
+
+			if err != nil {
+				funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
+				t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+			}
+		}
 	}
 }
 
 func (t *Tasker) Stop() {
 	t.stopOnce.Do(func() {
-		close(t.tasks)
+		t.tasks = NewQueue()
 		t.ticker.Stop()
 		<-t.stopChan
 	})

@@ -20,7 +20,6 @@ type TaskerOptions struct {
 	d              time.Duration // timeout duration
 	updateInterval time.Duration // update interval duration
 	executeTimeout time.Duration // execute timeout
-	chanBufSize    int           // channel buffer size
 	logger         *log.Logger
 }
 
@@ -34,7 +33,6 @@ func defaultTaskerOptions() *TaskerOptions {
 		timer:          time.NewTimer(TaskDefaultTimeout),
 		updateInterval: TaskDefaultUpdateInterval,
 		executeTimeout: TaskDefaultExecuteTimeout,
-		chanBufSize:    TaskDefaultChannelSize,
 		logger:         log.Default(),
 	}
 }
@@ -74,12 +72,6 @@ func WithUpdateInterval(d time.Duration) TaskerOption {
 func WithExecuteTimeout(d time.Duration) TaskerOption {
 	return func(o *TaskerOptions) {
 		o.executeTimeout = d
-	}
-}
-
-func WithChannelBufferSize(sz int) TaskerOption {
-	return func(o *TaskerOptions) {
-		o.chanBufSize = sz
 	}
 }
 
