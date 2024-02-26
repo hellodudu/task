@@ -162,8 +162,12 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 			}
 
 		default:
+			if !t.IsRunning() {
+				return nil
+			}
+
 			if t.tasks.Size() <= 0 {
-				time.Sleep(time.Millisecond * 20)
+				time.Sleep(time.Millisecond * 50)
 				continue
 			}
 
@@ -198,6 +202,7 @@ func (t *Tasker) Stop() {
 	t.stopOnce.Do(func() {
 		t.tasks = NewQueue()
 		t.ticker.Stop()
+		t.running.Store(false)
 		<-t.stopChan
 	})
 }
