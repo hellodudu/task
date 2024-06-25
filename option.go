@@ -12,28 +12,30 @@ type UpdateFn func() error
 
 type TaskerOption func(*TaskerOptions)
 type TaskerOptions struct {
-	uniqueId       int32
-	startFns       []StartFn // start callback
-	stopFns        []StopFn  // task stop callback
-	updateFn       UpdateFn  // default update callback
-	timer          *time.Timer
-	d              time.Duration // timeout duration
-	updateInterval time.Duration // update interval duration
-	executeTimeout time.Duration // execute timeout
-	logger         *log.Logger
+	uniqueId         int32
+	startFns         []StartFn // start callback
+	stopFns          []StopFn  // task stop callback
+	updateFn         UpdateFn  // default update callback
+	timer            *time.Timer
+	d                time.Duration // timeout duration
+	updateInterval   time.Duration // update interval duration
+	executeTimeout   time.Duration // execute timeout
+	onlyUpdateTicker bool          // only execute update
+	logger           *log.Logger
 }
 
 func defaultTaskerOptions() *TaskerOptions {
 	return &TaskerOptions{
-		uniqueId:       0,
-		d:              TaskDefaultTimeout,
-		startFns:       make([]StartFn, 0, 5),
-		stopFns:        make([]StopFn, 0, 5),
-		updateFn:       nil,
-		timer:          time.NewTimer(TaskDefaultTimeout),
-		updateInterval: TaskDefaultUpdateInterval,
-		executeTimeout: TaskDefaultExecuteTimeout,
-		logger:         log.Default(),
+		uniqueId:         0,
+		d:                TaskDefaultTimeout,
+		startFns:         make([]StartFn, 0, 5),
+		stopFns:          make([]StopFn, 0, 5),
+		updateFn:         nil,
+		timer:            time.NewTimer(TaskDefaultTimeout),
+		updateInterval:   TaskDefaultUpdateInterval,
+		executeTimeout:   TaskDefaultExecuteTimeout,
+		onlyUpdateTicker: false,
+		logger:           log.Default(),
 	}
 }
 
@@ -72,6 +74,12 @@ func WithUpdateInterval(d time.Duration) TaskerOption {
 func WithExecuteTimeout(d time.Duration) TaskerOption {
 	return func(o *TaskerOptions) {
 		o.executeTimeout = d
+	}
+}
+
+func WithOnlyUpdateTicker(onlyUpdate bool) TaskerOption {
+	return func(o *TaskerOptions) {
+		o.onlyUpdateTicker = onlyUpdate
 	}
 }
 

@@ -145,53 +145,74 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 		}
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-
-		case <-t.opts.timer.C:
-			return ErrTimeout
-
-		case <-t.ticker.C:
-			if t.opts.updateFn != nil {
-				// grace stop task when update
-				if err := t.opts.updateFn(); err != nil {
-					return err
-				}
-			}
-
-		default:
-			if !t.IsRunning() {
+	// only update ticker
+	if t.opts.onlyUpdateTicker {
+		for {
+			select {
+			case <-ctx.Done():
 				return nil
-			}
 
-			if t.tasks.Size() <= 0 {
-				time.Sleep(time.Millisecond * 50)
-				continue
-			}
+			case <-t.opts.timer.C:
+				return ErrTimeout
 
-			for {
-				h := t.tasks.Pop()
-				if h == nil {
-					break
+			case <-t.ticker.C:
+				if t.opts.updateFn != nil {
+					// grace stop task when update
+					if err := t.opts.updateFn(); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	} else {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+
+			case <-t.opts.timer.C:
+				return ErrTimeout
+
+			case <-t.ticker.C:
+				if t.opts.updateFn != nil {
+					// grace stop task when update
+					if err := t.opts.updateFn(); err != nil {
+						return err
+					}
 				}
 
-				tk := h.(*Task)
-				select {
-				case <-tk.c.Done():
+			default:
+				if !t.IsRunning() {
+					return nil
+				}
+
+				if t.tasks.Size() <= 0 {
+					time.Sleep(time.Millisecond * 50)
 					continue
-				default:
 				}
 
-				err := tk.f(tk.c, tk.p...)
-				if tk.e != nil {
-					tk.e <- err // handle result
-				}
+				for {
+					h := t.tasks.Pop()
+					if h == nil {
+						break
+					}
 
-				if err != nil {
-					funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
-					t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+					tk := h.(*Task)
+					select {
+					case <-tk.c.Done():
+						continue
+					default:
+					}
+
+					err := tk.f(tk.c, tk.p...)
+					if tk.e != nil {
+						tk.e <- err // handle result
+					}
+
+					if err != nil {
+						funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
+						t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+					}
 				}
 			}
 		}
