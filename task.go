@@ -62,8 +62,8 @@ func (t *Tasker) Init(opts ...TaskerOption) {
 	t.ticker.Reset(t.opts.updateInterval)
 }
 
-func (t *Tasker) ResetTimer() {
-	tm := t.opts.timer
+func (t *Tasker) ResetTimeout() {
+	tm := t.opts.timeout
 	if tm != nil && !tm.Stop() {
 		<-tm.C
 	}
@@ -128,7 +128,7 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
 }
 
 func (t *Tasker) Run(ctx context.Context) (reterr error) {
-	t.ResetTimer()
+	t.ResetTimeout()
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -146,13 +146,13 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 	}
 
 	// only update ticker
-	if t.opts.onlyUpdateTicker {
+	if t.opts.onlyTicker {
 		for {
 			select {
 			case <-ctx.Done():
 				return nil
 
-			case <-t.opts.timer.C:
+			case <-t.opts.timeout.C:
 				return ErrTimeout
 
 			case <-t.ticker.C:
@@ -164,13 +164,39 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 				}
 			}
 		}
+	} else if t.opts.onlyUpdate {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+
+			case <-t.opts.timeout.C:
+				return ErrTimeout
+
+			default:
+
+				tm := time.Now()
+				if t.opts.updateFn != nil {
+					if err := t.opts.updateFn(); err != nil {
+						return err
+					}
+				}
+
+				elapse := time.Since(tm)
+				if elapse < t.opts.updateInterval {
+					time.Sleep(t.opts.updateInterval - elapse)
+				} else {
+					time.Sleep(0)
+				}
+			}
+		}
 	} else {
 		for {
 			select {
 			case <-ctx.Done():
 				return nil
 
-			case <-t.opts.timer.C:
+			case <-t.opts.timeout.C:
 				return ErrTimeout
 
 			case <-t.ticker.C:
@@ -235,7 +261,7 @@ func (t *Tasker) stop() {
 		}
 	}
 
-	t.opts.timer.Stop()
+	t.opts.timeout.Stop()
 	t.running.Store(false)
 
 	select {
