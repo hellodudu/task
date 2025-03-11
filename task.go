@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/debug"
-	"sync"
 	"time"
 
 	"go.uber.org/atomic"
@@ -33,21 +32,19 @@ type Task struct {
 }
 
 type Tasker struct {
-	opts     *TaskerOptions
-	tasks    *Queue
-	stopChan chan struct{}
-	ticker   *time.Ticker
-	stopOnce *sync.Once
-	running  atomic.Bool
+	opts    *TaskerOptions
+	tasks   *Queue
+	ticker  *time.Ticker
+	running atomic.Bool
+	chStop  chan bool
 }
 
 func NewTasker() *Tasker {
 	return &Tasker{
-		opts:     &TaskerOptions{},
-		tasks:    NewQueue(),
-		stopChan: make(chan struct{}, 1),
-		ticker:   time.NewTicker(TaskDefaultUpdateInterval),
-		stopOnce: new(sync.Once),
+		opts:   &TaskerOptions{},
+		tasks:  NewQueue(),
+		ticker: time.NewTicker(TaskDefaultUpdateInterval),
+		chStop: make(chan bool, 1),
 	}
 }
 
@@ -63,11 +60,10 @@ func (t *Tasker) Init(opts ...TaskerOption) {
 }
 
 func (t *Tasker) ResetTimeout() {
-	tm := t.opts.timeout
-	if tm != nil && !tm.Stop() {
-		<-tm.C
+	if t.opts.timeout != nil {
+		t.opts.timeout.Stop()
 	}
-	tm.Reset(t.opts.d)
+	t.opts.timeout = time.NewTimer(t.opts.d)
 }
 
 func (t *Tasker) GetTaskNum() int {
@@ -152,6 +148,9 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 			case <-ctx.Done():
 				return nil
 
+			case <-t.chStop:
+				return nil
+
 			case <-t.opts.timeout.C:
 				return ErrTimeout
 
@@ -168,6 +167,9 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 		for {
 			select {
 			case <-ctx.Done():
+				return nil
+
+			case <-t.chStop:
 				return nil
 
 			case <-t.opts.timeout.C:
@@ -194,6 +196,9 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 		for {
 			select {
 			case <-ctx.Done():
+				return nil
+
+			case <-t.chStop:
 				return nil
 
 			case <-t.opts.timeout.C:
@@ -245,13 +250,18 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 	}
 }
 
-func (t *Tasker) Stop() {
-	t.stopOnce.Do(func() {
-		t.tasks = NewQueue()
-		t.ticker.Stop()
+func (t *Tasker) Stop() <-chan bool {
+	t.tasks = NewQueue()
+	t.ticker.Stop()
+
+	if t.IsRunning() {
 		t.running.Store(false)
-		<-t.stopChan
-	})
+		return t.chStop
+	} else {
+		chStop := make(chan bool, 1)
+		close(chStop)
+		return chStop
+	}
 }
 
 func (t *Tasker) stop() {
@@ -263,11 +273,5 @@ func (t *Tasker) stop() {
 
 	t.opts.timeout.Stop()
 	t.running.Store(false)
-
-	select {
-	case <-t.stopChan:
-		return
-	default:
-		close(t.stopChan)
-	}
+	close(t.chStop)
 }
