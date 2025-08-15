@@ -273,5 +273,9 @@ func (t *Tasker) stop() {
 
 	t.opts.timeout.Stop()
 	t.running.Store(false)
-	close(t.chStop)
+	select {
+	case <-t.chStop:
+	default:
+		close(t.chStop)
+	}
 }
