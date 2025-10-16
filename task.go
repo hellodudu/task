@@ -214,6 +214,29 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 
 			default:
 				if !t.IsRunning() {
+					for {
+						h := t.tasks.Pop()
+						if h == nil {
+							break
+						}
+
+						tk := h.(*Task)
+						select {
+						case <-tk.c.Done():
+							continue
+						default:
+						}
+
+						err := tk.f(tk.c, tk.p...)
+						if tk.e != nil {
+							tk.e <- err // handle result
+						}
+
+						if err != nil {
+							funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
+							t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+						}
+					}
 					return nil
 				}
 
@@ -251,7 +274,7 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 }
 
 func (t *Tasker) Stop() <-chan bool {
-	t.tasks = NewQueue()
+	// t.tasks = NewQueue()
 	t.ticker.Stop()
 
 	if t.IsRunning() {
