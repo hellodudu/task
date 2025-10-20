@@ -127,12 +127,12 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 	t.ResetTimeout()
 
 	defer func() {
+		t.stop()
 		if err := recover(); err != nil {
 			stack := string(debug.Stack())
 			t.opts.logger.Printf("catch exception:%v, panic recovered with stack:%s", err, stack)
 			reterr = ErrTaskPanic
 		}
-		t.stop()
 	}()
 
 	if len(t.opts.startFns) > 0 {
