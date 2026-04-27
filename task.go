@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"go.uber.org/atomic"
@@ -37,6 +38,9 @@ type Tasker struct {
 	ticker  *time.Ticker
 	running atomic.Bool
 	chStop  chan bool
+
+	started  atomic.Bool
+	stopOnce sync.Once
 }
 
 func NewTasker() *Tasker {
@@ -61,7 +65,12 @@ func (t *Tasker) Init(opts ...TaskerOption) {
 
 func (t *Tasker) ResetTimeout() {
 	if t.opts.timeout != nil {
-		t.opts.timeout.Stop()
+		// Some callers may provide an uninitialized *time.Timer (zero value),
+		// for which Stop() panics. Be defensive: timeout is only a safety net.
+		func() {
+			defer func() { _ = recover() }()
+			t.opts.timeout.Stop()
+		}()
 	}
 	t.opts.timeout = time.NewTimer(t.opts.d)
 }
@@ -125,6 +134,7 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
 
 func (t *Tasker) Run(ctx context.Context) (reterr error) {
 	t.ResetTimeout()
+	t.started.Store(true)
 
 	defer func() {
 		t.stop()
@@ -277,29 +287,39 @@ func (t *Tasker) Stop() <-chan bool {
 	// t.tasks = NewQueue()
 	t.ticker.Stop()
 
-	if t.IsRunning() {
-		t.running.Store(false)
-		return t.chStop
-	} else {
-		chStop := make(chan bool, 1)
-		close(chStop)
-		return chStop
+	// Signal the running loop to stop. Make Stop() idempotent.
+	t.running.Store(false)
+
+	// If Run() hasn't started yet, it may never reach defer t.stop().
+	// Trigger stop asynchronously so Stop() itself never blocks on stopFns.
+	if !t.started.Load() {
+		go t.stop()
 	}
+
+	return t.chStop
 }
 
 func (t *Tasker) stop() {
-	if len(t.opts.stopFns) > 0 {
-		for _, fn := range t.opts.stopFns {
-			fn()
+	t.stopOnce.Do(func() {
+		if len(t.opts.stopFns) > 0 {
+			for _, fn := range t.opts.stopFns {
+				fn()
+			}
 		}
-	}
 
-	t.opts.timeout.Stop()
-	t.running.Store(false)
+		tm := t.opts.timeout
+		if tm != nil {
+			func() {
+				defer func() { _ = recover() }()
+				tm.Stop()
+			}()
+		}
+		t.running.Store(false)
 
-	select {
-	case <-t.chStop:
-	default:
-		close(t.chStop)
-	}
+		select {
+		case <-t.chStop:
+		default:
+			close(t.chStop)
+		}
+	})
 }
