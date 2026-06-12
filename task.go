@@ -33,11 +33,12 @@ type Task struct {
 }
 
 type Tasker struct {
-	opts    *TaskerOptions
-	tasks   *Queue
-	ticker  *time.Ticker
-	running atomic.Bool
-	chStop  chan bool
+	opts     *TaskerOptions
+	tasks    *Queue
+	ticker   *time.Ticker
+	running  atomic.Bool
+	draining atomic.Bool
+	chStop   chan bool
 
 	started  atomic.Bool
 	stopOnce sync.Once
@@ -60,6 +61,7 @@ func (t *Tasker) Init(opts ...TaskerOption) {
 	}
 
 	t.running.Store(true)
+	t.draining.Store(false)
 	t.ticker.Reset(t.opts.updateInterval)
 }
 
@@ -83,8 +85,19 @@ func (t *Tasker) IsRunning() bool {
 	return t.running.Load()
 }
 
+func (t *Tasker) IsDraining() bool {
+	return t.draining.Load()
+}
+
+func (t *Tasker) canEnqueue() bool {
+	if t.running.Load() {
+		return true
+	}
+	return t.started.Load() && t.draining.Load()
+}
+
 func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) error {
-	if !t.IsRunning() {
+	if !t.canEnqueue() {
 		return ErrTaskNotRunning
 	}
 
@@ -117,9 +130,9 @@ func (t *Tasker) AddWait(ctx context.Context, f TaskHandler, p ...interface{}) e
 	}
 }
 
-func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
-	if !t.IsRunning() {
-		return
+func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) error {
+	if !t.canEnqueue() {
+		return ErrTaskNotRunning
 	}
 
 	tk := &Task{
@@ -130,6 +143,56 @@ func (t *Tasker) Add(ctx context.Context, f TaskHandler, p ...interface{}) {
 	}
 	tk.p = append(tk.p, p...)
 	t.tasks.Push(tk)
+	return nil
+}
+
+func (t *Tasker) executeTask(tk *Task) {
+	select {
+	case <-tk.c.Done():
+		return
+	default:
+	}
+
+	err := tk.f(tk.c, tk.p...)
+	if tk.e != nil {
+		tk.e <- err // handle result
+	}
+
+	if err != nil {
+		funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
+		t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
+	}
+}
+
+func (t *Tasker) processPendingTasks() {
+	for {
+		h := t.tasks.Pop()
+		if h == nil {
+			break
+		}
+		t.executeTask(h.(*Task))
+	}
+}
+
+func (t *Tasker) drainPendingTasks() {
+	idleRounds := 0
+	const maxIdleRounds = 5
+
+	for idleRounds < maxIdleRounds {
+		h := t.tasks.Pop()
+		if h != nil {
+			t.executeTask(h.(*Task))
+			idleRounds = 0
+			continue
+		}
+
+		if t.tasks.Size() > 0 {
+			continue
+		}
+
+		idleRounds++
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func (t *Tasker) Run(ctx context.Context) (reterr error) {
@@ -137,6 +200,7 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 	t.started.Store(true)
 
 	defer func() {
+		t.draining.Store(false)
 		t.stop()
 		if err := recover(); err != nil {
 			stack := string(debug.Stack())
@@ -206,9 +270,11 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 		for {
 			select {
 			case <-ctx.Done():
+				t.drainPendingTasks()
 				return nil
 
 			case <-t.chStop:
+				t.drainPendingTasks()
 				return nil
 
 			case <-t.opts.timeout.C:
@@ -224,29 +290,8 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 
 			default:
 				if !t.IsRunning() {
-					for {
-						h := t.tasks.Pop()
-						if h == nil {
-							break
-						}
-
-						tk := h.(*Task)
-						select {
-						case <-tk.c.Done():
-							continue
-						default:
-						}
-
-						err := tk.f(tk.c, tk.p...)
-						if tk.e != nil {
-							tk.e <- err // handle result
-						}
-
-						if err != nil {
-							funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
-							t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
-						}
-					}
+					t.drainPendingTasks()
+					t.draining.Store(false)
 					return nil
 				}
 
@@ -255,29 +300,7 @@ func (t *Tasker) Run(ctx context.Context) (reterr error) {
 					continue
 				}
 
-				for {
-					h := t.tasks.Pop()
-					if h == nil {
-						break
-					}
-
-					tk := h.(*Task)
-					select {
-					case <-tk.c.Done():
-						continue
-					default:
-					}
-
-					err := tk.f(tk.c, tk.p...)
-					if tk.e != nil {
-						tk.e <- err // handle result
-					}
-
-					if err != nil {
-						funcName := runtime.FuncForPC(reflect.ValueOf(tk.f).Pointer()).Name()
-						t.opts.logger.Printf("execute %s with error:%v\n", funcName, err)
-					}
-				}
+				t.processPendingTasks()
 			}
 		}
 	}
@@ -287,12 +310,14 @@ func (t *Tasker) Stop() <-chan bool {
 	// t.tasks = NewQueue()
 	t.ticker.Stop()
 
-	// Signal the running loop to stop. Make Stop() idempotent.
+	// Enter graceful shutdown: keep accepting tasks until drain completes.
+	t.draining.Store(true)
 	t.running.Store(false)
 
 	// If Run() hasn't started yet, it may never reach defer t.stop().
 	// Trigger stop asynchronously so Stop() itself never blocks on stopFns.
 	if !t.started.Load() {
+		t.draining.Store(false)
 		go t.stop()
 	}
 
@@ -315,6 +340,7 @@ func (t *Tasker) stop() {
 			}()
 		}
 		t.running.Store(false)
+		t.draining.Store(false)
 
 		select {
 		case <-t.chStop:
